@@ -111,12 +111,25 @@ def login():
     }), 200
 
 @app.route('/users', methods=['GET', 'OPTIONS'])
-@token_required
-def get_user_info(current_user):
+def get_user_info():
     if request.method == 'OPTIONS':
-        response = jsonify({'message': 'Preflight request successful'}), 200
-        response.headers.add('Access-Control-Allow-Methods', 'GET')
-        response.headers.add('Access-Control-Allow-Headers', 'Authorization')
+        return '', 204  # Return empty response with status code 204 for OPTIONS requests
+
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify({'message': 'Token is missing!'}), 401
+
+    try:
+        token_parts = token.split(" ")
+        if len(token_parts) != 2 or token_parts[0] != 'Bearer':
+            return jsonify({'message': 'Invalid token format'}), 403
+
+        data = jwt.decode(token_parts[1], app.config['SECRET_KEY'], algorithms=['HS256'])
+        current_user = User.query.filter_by(id=data['id']).first()
+    except jwt.ExpiredSignatureError:
+        return jsonify({'message': 'Token has expired!'}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({'message': 'Token is invalid!'}), 401
 
     # Serialize current user's data into JSON format
     user_data = {
@@ -126,7 +139,7 @@ def get_user_info(current_user):
         'profile_pic_id': current_user.profile_pic_id
     }
 
-    return jsonify(user_data)
+    return jsonify(user_data), 200  # Return user data with status code
 
 @app.route('/payment/callback', methods=['POST'])
 def payment_callback():
